@@ -28,8 +28,6 @@
 
 // Objeto com as variaveis globais de controle do Vap
 struct {
-  // Indice da cor RGB
-  int cor;
   // Carga na resistencia
   int output;
   int rise;
@@ -39,16 +37,35 @@ struct {
   int fan;
 } vap;
 
-// Cores indicadoras da temperatura.
-#define COLORS 256
-// Cinco cores separando cada um dos
-// quatro intervalos do gradiente
-byte marcas[5][3];
-// Quatro vetores de incremento para 
-// fazer a transicao entre cada intervalo
-int soma[4][3];
-// Vetor das cores
-byte cores[COLORS][3];
+// Exibiçao de cor por Led RGB
+#define MAXR 255
+#define MAXG 170
+#define MAXB 250
+struct { 
+  // Numero de cores disponveis
+  int estagios;
+  // Pontos de passagem
+  int verticesQuant;
+  // Intervalos entre vertices
+  int intervQuant;
+  // Tamanho de cada intervalo
+  double intervTaman;
+  // Os vertices
+  int** vertices;
+  // Direcoes (vertices - 1)
+  int** direcoes;
+  // Cor gerada
+  int t[3];
+} cor;
+
+void gerarCor(int c, int* t ){
+  long int k, p;
+  k = cor.intervQuant * c / cor.estagios;
+  p = c - cor.intervTaman * k;
+  for ( int j = 0; j < 3; j++ ){
+    t[j] = cor.vertices[k][j] + p * cor.direcoes[k][j] / cor.intervTaman;
+  }
+}
 
 // Amostras do Pot de controle da resistencia
 #define POTSAMPLES 31
@@ -73,17 +90,16 @@ void agndTrfControl(agndTarefa_p I){
      average += potPinSamples[i];
   }
   average /= POTSAMPLES;
-  // Utilizar um crescimento nao linear para a escala
+  // input = average
   int input;
-  input = 1023.0 * ( 1 + pow((average / 1023.0 - 1), 3.0) );
+  input = average;
   // Normalizar output entre RESLOW e RESHIGH
   vap.output = RESLOW + input / 1023.0 * (RESHIGH - RESLOW);
   // Exibir cor
-  int cor;
-  cor = input / 1024.0 * COLORS;
-  analogWrite(ledR, cores[cor][0]);
-  analogWrite(ledG, cores[cor][1]);
-  analogWrite(ledB, cores[cor][2]);
+  gerarCor(input, cor.t);
+  analogWrite(ledR, cor.t[0]);
+  analogWrite(ledG, cor.t[1]);
+  analogWrite(ledB, cor.t[2]);
   // Acionamento
   if ( digitalRead(runPin) == HIGH ){
     // Esquentar e soprar
@@ -131,7 +147,6 @@ void agndTrfOutput(agndTarefa_p I){
 struct agndTarefa_s agndTrf010 = { .acao = agndTrfOutput, .intervalo = 17, .ativo = 1 };
 
 void setup() {
-  Serial.begin(115200);
   pinMode(ledR, OUTPUT);
   pinMode(ledG, OUTPUT);
   pinMode(ledB, OUTPUT);
@@ -146,67 +161,41 @@ void setup() {
   vap.working = 0;
   vap.fan = 0;
   
-  // Carregar cores
-  // Azul
-  marcas[0][0] = 0;
-  marcas[0][1] = 0;
-  marcas[0][2] = 255;
-  // Ciano
-  marcas[1][0] = 0;
-  marcas[1][1] = 255;
-  marcas[1][2] = 255;
-  // Verde
-  marcas[2][0] = 0;
-  marcas[2][1] = 255;
-  marcas[2][2] = 0;
-  // Amarelo
-  marcas[3][0] = 255;
-  marcas[3][1] = 255;
-  marcas[3][2] = 0;
-  // Vermelho
-  marcas[4][0] = 255;
-  marcas[4][1] = 0;
-  marcas[4][2] = 0;
+  // Definicoes de transicao de cor Led RGB
+  cor.estagios = 1024;
+  cor.verticesQuant = 3;
+  cor.intervQuant = cor.verticesQuant - 1;
+  cor.intervTaman = cor.estagios / cor.intervQuant;
 
-  // Do azul para o ciano
-  soma[0][0] = 0;
-  soma[0][1] = 256 / ( COLORS / 4.0 );
-  soma[0][2] = 0;
-  // Do ciano para o verde
-  soma[1][0] = 0;
-  soma[1][1] = 0;
-  soma[1][2] = -1 * 256 / ( COLORS / 4.0 );
-  // Do verde para o amarelo
-  soma[2][0] = 256 / ( COLORS / 4.0 );
-  soma[2][1] = 0;
-  soma[2][2] = 0;
-  // Do amarelo para o vermelho
-  soma[3][0] = 0;
-  soma[3][1] = -1 * 256 / ( COLORS / 4.0 );
-  soma[3][2] = 0;
-  
-  // Indice da cor no vetor cores
-  int i = 0;
-  for(int s = 0; s < 4; s++){
-    // Inserir a marca no vetor de cores
-    cores[i][0] = marcas[s][0];
-    cores[i][1] = marcas[s][1];
-    cores[i][2] = marcas[s][2];
-    i++;
-    // Marca + (COLORS / 4 - 1) cores intermediarias, gerando
-    // 4 intervalos de COLORS / 4 cores
-    for (int c = 0; c < COLORS / 4 - 1; c++){
-      // Gerar as cores no intervalos entre as marcas
-      cores[i][0] = cores[i-1][0] + soma[s][0];
-      cores[i][1] = cores[i-1][1] + soma[s][1];
-      cores[i][2] = cores[i-1][2] + soma[s][2];
-      i++;
+  cor.vertices = (int**) malloc(sizeof(int*) * cor.verticesQuant);
+  for ( int i = 0; i < cor.verticesQuant; i++ ){
+    cor.vertices[i] = (int*) malloc(sizeof(int) * 3);
+  }
+
+  cor.direcoes = (int**) malloc(sizeof(int*) * cor.intervQuant);
+  for ( int i = 0; i < cor.intervQuant; i++ ){
+    cor.direcoes[i] = (int*) malloc(sizeof(int) * 3);
+  }
+
+  // Pontos de passagem de cor
+  cor.vertices[0][0] = 0;
+  cor.vertices[0][1] = 0;
+  cor.vertices[0][2] = MAXB;
+
+  cor.vertices[1][0] = 0;
+  cor.vertices[1][1] = MAXG;
+  cor.vertices[1][2] = 0;
+
+  cor.vertices[2][0] = MAXR;
+  cor.vertices[2][1] = 0;
+  cor.vertices[2][2] = 0;
+
+  // Definir direcoes entre vertices
+  for ( int i = 0; i < cor.intervQuant; i++ ){
+    for ( int k = 0; k < 3; k++ ){
+      cor.direcoes[i][k] = cor.vertices[i + 1][k] - cor.vertices[i][k];
     }
   }
-  // Substituir ultima cor pela ultima marca (255,0,0)
-  cores[COLORS - 1][0] = marcas[4][0];
-  cores[COLORS - 1][1] = marcas[4][1];
-  cores[COLORS - 1][2] = marcas[4][2];
 
   // Carregar amostras iniciais do Pot de controle da resistencia 
   for ( int i = 0; i < POTSAMPLES; i++ ){
