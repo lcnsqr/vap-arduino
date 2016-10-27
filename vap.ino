@@ -163,7 +163,7 @@ void setup() {
   
   // Definicoes de transicao de cor Led RGB
   cor.estagios = 1024;
-  cor.verticesQuant = 3;
+  cor.verticesQuant = 5;
   cor.intervQuant = cor.verticesQuant - 1;
   cor.intervTaman = cor.estagios / cor.intervQuant;
 
@@ -183,12 +183,20 @@ void setup() {
   cor.vertices[0][2] = MAXB;
 
   cor.vertices[1][0] = 0;
-  cor.vertices[1][1] = MAXG;
-  cor.vertices[1][2] = 0;
+  cor.vertices[1][1] = (int)(MAXG/2.0);
+  cor.vertices[1][2] = (int)(MAXB/2.0);
 
-  cor.vertices[2][0] = MAXR;
-  cor.vertices[2][1] = 0;
+  cor.vertices[2][0] = 0;
+  cor.vertices[2][1] = MAXG;
   cor.vertices[2][2] = 0;
+
+  cor.vertices[3][0] = (int)(MAXR/2.0);
+  cor.vertices[3][1] = (int)(MAXG/2.0);
+  cor.vertices[3][2] = 0;
+
+  cor.vertices[4][0] = MAXR;
+  cor.vertices[4][1] = 0;
+  cor.vertices[4][2] = 0;
 
   // Definir direcoes entre vertices
   for ( int i = 0; i < cor.intervQuant; i++ ){
